@@ -1,33 +1,32 @@
-import { createClient } from '@supabase/supabase-js';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { Guard } from './types';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-// Singleton Supabase client
-let _client: ReturnType<typeof createClient> | null = null;
+// Singleton Supabase client (typed as any to avoid missing DB type definitions)
+let _client: SupabaseClient<any> | null = null;
 
 export function isDBConfigured(): boolean {
   return !!(supabaseUrl && supabaseKey);
 }
 
-export function getSupabaseClient() {
+export function getSupabaseClient(): SupabaseClient<any> | null {
   if (!isDBConfigured()) return null;
   if (!_client) {
-    _client = createClient(supabaseUrl, supabaseKey);
+    _client = createClient<any>(supabaseUrl, supabaseKey);
   }
   return _client;
 }
 
-// Ensure the guards table exists (Supabase usually has it via migrations, but we ensure it via RPC or direct)
+// No-op: table management is done via Supabase Dashboard / migrations
 export async function ensureGuardsTable(): Promise<void> {
-  // With Supabase JS client, table creation is done via Supabase Dashboard or migrations.
-  // We skip runtime table creation here — the table should already exist in Supabase.
   return;
 }
 
 // Map database row to Guard interface
-function rowToGuard(row: Record<string, unknown>): Guard {
+function rowToGuard(row: any): Guard {
   return {
     id: String(row.id),
     guardId: String(row.guard_id),
@@ -69,7 +68,7 @@ export async function fetchGuardsFromDB(): Promise<Guard[]> {
     return [];
   }
 
-  return (data ?? []).map(rowToGuard);
+  return ((data as any[]) ?? []).map(rowToGuard);
 }
 
 // Save (upsert) a guard into Supabase
@@ -77,7 +76,7 @@ export async function saveGuardToDB(guard: Guard): Promise<Guard> {
   const supabase = getSupabaseClient();
   if (!supabase) throw new Error('Database is not configured.');
 
-  const row = {
+  const row: Record<string, any> = {
     id: guard.id,
     guard_id: guard.guardId,
     name: guard.name,
@@ -104,12 +103,12 @@ export async function saveGuardToDB(guard: Guard): Promise<Guard> {
 
   const { data, error } = await supabase
     .from('guards')
-    .upsert(row, { onConflict: 'id' })
+    .upsert(row as any, { onConflict: 'id' })
     .select()
     .single();
 
   if (error) throw new Error(error.message);
-  return rowToGuard(data);
+  return rowToGuard(data as any);
 }
 
 // Update guard status
@@ -119,7 +118,7 @@ export async function updateGuardStatusInDB(id: string, status: string): Promise
 
   const { error } = await supabase
     .from('guards')
-    .update({ status })
+    .update({ status } as any)
     .eq('id', id);
 
   if (error) {
