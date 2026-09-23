@@ -408,19 +408,10 @@ export default function GuardsPage() {
             <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold text-[#C9A84C] bg-[#040936]">
               AIRAVAT SECURITY
             </span>
-            <button
-              onClick={() => setShowDbModal(true)}
-              className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full flex items-center gap-1.5 transition-all hover:opacity-80 cursor-pointer ${dbSource === 'supabase' && dbTestResult?.connected
-                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                  : 'bg-amber-100 text-amber-900 border border-amber-300'
-                }`}
-              title="Click to manage Supabase database connection"
-            >
-              <span className={`w-2 h-2 rounded-full ${dbSource === 'supabase' && dbTestResult?.connected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
-              {dbSource === 'supabase' && dbTestResult?.connected
-                ? 'Supabase Database Connected ✓'
-                : 'Connect Supabase Database ⚡'}
-            </button>
+            <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full flex items-center gap-1.5 bg-emerald-100 text-emerald-800 border border-emerald-300">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              {dbSource === 'supabase' ? 'Supabase Connected ✓' : 'Local Mode'}
+            </span>
           </div>
           <h1 className="text-2xl font-black text-[#040936] tracking-tight">Security Personnel Roster</h1>
           <p className="text-gray-500 text-xs sm:text-sm mt-0.5">
@@ -429,13 +420,6 @@ export default function GuardsPage() {
         </div>
 
         <div className="flex items-center gap-2.5">
-          <button
-            onClick={() => setShowDbModal(true)}
-            className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-gray-200 text-xs font-bold text-gray-700 hover:bg-gray-50 transition-colors"
-          >
-            <span>⚡</span>
-            <span>DB Setup</span>
-          </button>
 
           <button
             onClick={loadGuards}
@@ -463,26 +447,7 @@ export default function GuardsPage() {
         </div>
       </div>
 
-      {/* Database Setup Banner if still on local / awaiting password */}
-      {(!dbTestResult?.connected || dbSource === 'local') && (
-        <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
-          <div className="flex items-start gap-3">
-            <span className="text-xl">⚡</span>
-            <div>
-              <p className="font-bold text-amber-900">Connect to Supabase PostgreSQL Database</p>
-              <p className="text-amber-700 mt-0.5">
-                Click <strong>"Connect Supabase"</strong> to enter your database password and activate direct cloud synchronization.
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={() => setShowDbModal(true)}
-            className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shrink-0 shadow-sm transition-colors"
-          >
-            Enter DB Password →
-          </button>
-        </div>
-      )}
+
 
       {/* Stats Counter Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
