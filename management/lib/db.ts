@@ -1,84 +1,29 @@
-import { Pool } from 'pg';
+import { createClient } from '@supabase/supabase-js';
 import { Guard } from './types';
 
-let pool: Pool | null = null;
-let initialized = false;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-// Determine if valid connection string exists
+// Singleton Supabase client
+let _client: ReturnType<typeof createClient> | null = null;
+
 export function isDBConfigured(): boolean {
-  const url = process.env.DATABASE_URL || process.env.DIRECT_URL;
-  if (!url) return false;
-  if (url.includes('[YOUR-PASSWORD]')) return false;
-  return true;
+  return !!(supabaseUrl && supabaseKey);
 }
 
-export function getDBPool(): Pool | null {
+export function getSupabaseClient() {
   if (!isDBConfigured()) return null;
-
-  if (!pool) {
-    const connectionString = process.env.DATABASE_URL || process.env.DIRECT_URL;
-    pool = new Pool({
-      connectionString,
-      ssl: {
-        rejectUnauthorized: false,
-      },
-      max: 10,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 10000,
-    });
+  if (!_client) {
+    _client = createClient(supabaseUrl, supabaseKey);
   }
-
-  return pool;
+  return _client;
 }
 
-// Ensure the guards table exists in Supabase
+// Ensure the guards table exists (Supabase usually has it via migrations, but we ensure it via RPC or direct)
 export async function ensureGuardsTable(): Promise<void> {
-  if (initialized) return;
-  const db = getDBPool();
-  if (!db) return;
-
-  const query = `
-    CREATE TABLE IF NOT EXISTS guards (
-      id TEXT PRIMARY KEY,
-      guard_id TEXT UNIQUE NOT NULL,
-      name TEXT NOT NULL,
-      phone TEXT NOT NULL,
-      email TEXT,
-      address TEXT NOT NULL,
-      dob TEXT NOT NULL,
-      age NUMERIC,
-      gender TEXT NOT NULL,
-      designation TEXT NOT NULL,
-      site TEXT NOT NULL,
-      salary NUMERIC NOT NULL,
-      status TEXT NOT NULL DEFAULT 'Active',
-      join_date TEXT NOT NULL,
-      password TEXT NOT NULL,
-      photo TEXT,
-      aadhar_no TEXT,
-      emergency_contact TEXT,
-      old_experience TEXT,
-      preferred_shift TEXT,
-      work_type TEXT,
-      remarks TEXT,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    );
-
-    -- Ensure backwards compatibility if table was created previously
-    ALTER TABLE guards ADD COLUMN IF NOT EXISTS age NUMERIC;
-    ALTER TABLE guards ADD COLUMN IF NOT EXISTS old_experience TEXT;
-    ALTER TABLE guards ADD COLUMN IF NOT EXISTS preferred_shift TEXT;
-    ALTER TABLE guards ADD COLUMN IF NOT EXISTS work_type TEXT;
-    ALTER TABLE guards ADD COLUMN IF NOT EXISTS remarks TEXT;
-  `;
-
-  try {
-    await db.query(query);
-    initialized = true;
-  } catch (err) {
-    console.error('Failed to initialize guards table in Supabase:', err);
-    throw err;
-  }
+  // With Supabase JS client, table creation is done via Supabase Dashboard or migrations.
+  // We skip runtime table creation here — the table should already exist in Supabase.
+  return;
 }
 
 // Map database row to Guard interface
@@ -111,99 +56,92 @@ function rowToGuard(row: Record<string, unknown>): Guard {
 
 // Fetch all guards from Supabase
 export async function fetchGuardsFromDB(): Promise<Guard[]> {
-  const db = getDBPool();
-  if (!db) return [];
+  const supabase = getSupabaseClient();
+  if (!supabase) return [];
 
-  await ensureGuardsTable();
-  const res = await db.query('SELECT * FROM guards ORDER BY created_at DESC, guard_id ASC');
-  return res.rows.map(rowToGuard);
-}
+  const { data, error } = await supabase
+    .from('guards')
+    .select('*')
+    .order('created_at', { ascending: false });
 
-// Save a new guard into Supabase
-export async function saveGuardToDB(guard: Guard): Promise<Guard> {
-  const db = getDBPool();
-  if (!db) {
-    throw new Error('Database is not configured.');
+  if (error) {
+    console.error('fetchGuardsFromDB error:', error.message);
+    return [];
   }
 
-  await ensureGuardsTable();
-
-  const query = `
-    INSERT INTO guards (
-      id, guard_id, name, phone, email, address, dob, age, gender, designation, site, salary, status, join_date, password, photo, aadhar_no, emergency_contact, old_experience, preferred_shift, work_type, remarks
-    ) VALUES (
-      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22
-    )
-    ON CONFLICT (id) DO UPDATE SET
-      guard_id = EXCLUDED.guard_id,
-      name = EXCLUDED.name,
-      phone = EXCLUDED.phone,
-      email = EXCLUDED.email,
-      address = EXCLUDED.address,
-      dob = EXCLUDED.dob,
-      age = EXCLUDED.age,
-      gender = EXCLUDED.gender,
-      designation = EXCLUDED.designation,
-      site = EXCLUDED.site,
-      salary = EXCLUDED.salary,
-      status = EXCLUDED.status,
-      join_date = EXCLUDED.join_date,
-      password = EXCLUDED.password,
-      photo = EXCLUDED.photo,
-      aadhar_no = EXCLUDED.aadhar_no,
-      emergency_contact = EXCLUDED.emergency_contact,
-      old_experience = EXCLUDED.old_experience,
-      preferred_shift = EXCLUDED.preferred_shift,
-      work_type = EXCLUDED.work_type,
-      remarks = EXCLUDED.remarks
-    RETURNING *;
-  `;
-
-  const values = [
-    guard.id,
-    guard.guardId,
-    guard.name,
-    guard.phone,
-    guard.email || null,
-    guard.address,
-    guard.dob,
-    guard.age || null,
-    guard.gender,
-    guard.designation,
-    guard.site,
-    guard.salary,
-    guard.status,
-    guard.joinDate,
-    guard.password,
-    guard.photo || null,
-    guard.aadharNo || null,
-    guard.emergencyContact || null,
-    guard.oldExperience || null,
-    guard.preferredShift || null,
-    guard.workType || null,
-    guard.remarks || null,
-  ];
-
-  const res = await db.query(query, values);
-  return rowToGuard(res.rows[0]);
+  return (data ?? []).map(rowToGuard);
 }
 
-// Toggle or update status in Supabase
-export async function updateGuardStatusInDB(id: string, status: string): Promise<boolean> {
-  const db = getDBPool();
-  if (!db) return false;
+// Save (upsert) a guard into Supabase
+export async function saveGuardToDB(guard: Guard): Promise<Guard> {
+  const supabase = getSupabaseClient();
+  if (!supabase) throw new Error('Database is not configured.');
 
-  await ensureGuardsTable();
-  await db.query('UPDATE guards SET status = $1 WHERE id = $2', [status, id]);
+  const row = {
+    id: guard.id,
+    guard_id: guard.guardId,
+    name: guard.name,
+    phone: guard.phone,
+    email: guard.email || null,
+    address: guard.address,
+    dob: guard.dob,
+    age: guard.age || null,
+    gender: guard.gender,
+    designation: guard.designation,
+    site: guard.site,
+    salary: guard.salary,
+    status: guard.status,
+    join_date: guard.joinDate,
+    password: guard.password,
+    photo: guard.photo || null,
+    aadhar_no: guard.aadharNo || null,
+    emergency_contact: guard.emergencyContact || null,
+    old_experience: guard.oldExperience || null,
+    preferred_shift: guard.preferredShift || null,
+    work_type: guard.workType || null,
+    remarks: guard.remarks || null,
+  };
+
+  const { data, error } = await supabase
+    .from('guards')
+    .upsert(row, { onConflict: 'id' })
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
+  return rowToGuard(data);
+}
+
+// Update guard status
+export async function updateGuardStatusInDB(id: string, status: string): Promise<boolean> {
+  const supabase = getSupabaseClient();
+  if (!supabase) return false;
+
+  const { error } = await supabase
+    .from('guards')
+    .update({ status })
+    .eq('id', id);
+
+  if (error) {
+    console.error('updateGuardStatusInDB error:', error.message);
+    return false;
+  }
   return true;
 }
 
-// Delete guard from Supabase
+// Delete a guard
 export async function deleteGuardFromDB(id: string): Promise<boolean> {
-  const db = getDBPool();
-  if (!db) return false;
+  const supabase = getSupabaseClient();
+  if (!supabase) return false;
 
-  await ensureGuardsTable();
-  await db.query('DELETE FROM guards WHERE id = $1', [id]);
+  const { error } = await supabase
+    .from('guards')
+    .delete()
+    .eq('id', id);
+
+  if (error) {
+    console.error('deleteGuardFromDB error:', error.message);
+    return false;
+  }
   return true;
 }

@@ -1,37 +1,40 @@
 import { NextResponse } from 'next/server';
-import { isDBConfigured, getDBPool, ensureGuardsTable } from '@/lib/db';
+import { isDBConfigured, getSupabaseClient } from '@/lib/db';
 
-// GET: Test if the database is connected and working
+// GET: Test if the Supabase database is connected and working
 export async function GET() {
   try {
     if (!isDBConfigured()) {
       return NextResponse.json({
         connected: false,
-        message: 'DATABASE_URL is not configured. Please set it in .env.local',
+        message: 'NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY is not set in .env.local',
       });
     }
 
-    const pool = getDBPool();
-    if (!pool) {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
       return NextResponse.json({
         connected: false,
-        message: 'Unable to initialize database connection pool.',
+        message: 'Unable to initialize Supabase client.',
       });
     }
 
-    // Run connection probe
-    const res = await pool.query('SELECT current_database(), current_user, version()');
-    await ensureGuardsTable();
+    // Test connection by counting guards
+    const { count, error } = await supabase
+      .from('guards')
+      .select('*', { count: 'exact', head: true });
 
-    const countRes = await pool.query('SELECT COUNT(*)::int as total FROM guards');
-    const totalGuards = countRes.rows[0]?.total || 0;
+    if (error) {
+      return NextResponse.json({
+        connected: false,
+        message: error.message,
+      });
+    }
 
     return NextResponse.json({
       connected: true,
-      database: res.rows[0]?.current_database,
-      user: res.rows[0]?.current_user,
-      totalGuards,
-      message: 'Successfully connected to Supabase PostgreSQL database!',
+      totalGuards: count ?? 0,
+      message: 'Successfully connected to Supabase!',
     });
   } catch (err: unknown) {
     const error = err as Error;
