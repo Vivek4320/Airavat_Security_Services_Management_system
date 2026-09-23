@@ -31,27 +31,6 @@ export default function GuardsPage() {
   const [dbSource, setDbSource] = useState<'supabase' | 'local'>('local');
   const [dbMessage, setDbMessage] = useState<string>('');
 
-  // DB Password modal states
-  const [showDbModal, setShowDbModal] = useState(false);
-  const [dbPasswordInput, setDbPasswordInput] = useState('');
-  const [dbTesting, setDbTesting] = useState(false);
-  const [dbTestResult, setDbTestResult] = useState<{ connected: boolean; message: string } | null>(null);
-
-  // Test DB connection
-  const checkDbStatus = async () => {
-    try {
-      const res = await fetch('/api/database/test');
-      const data = await res.json();
-      setDbTestResult(data);
-      if (data.connected) {
-        setDbSource('supabase');
-      }
-    } catch (err: unknown) {
-      const error = err as Error;
-      setDbTestResult({ connected: false, message: error.message });
-    }
-  };
-
   // Fetch guards from API (Supabase) with local fallback
   const loadGuards = useCallback(async () => {
     setLoading(true);
@@ -85,39 +64,7 @@ export default function GuardsPage() {
 
   useEffect(() => {
     loadGuards();
-    checkDbStatus();
   }, [loadGuards]);
-
-  // Save new DB password
-  const handleSaveDbPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!dbPasswordInput.trim()) return;
-    setDbTesting(true);
-
-    try {
-      const res = await fetch('/api/database/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: dbPasswordInput.trim() }),
-      });
-
-      const data = await res.json();
-      if (data.success) {
-        // Run test check
-        await checkDbStatus();
-        await loadGuards();
-        setShowDbModal(false);
-        setDbPasswordInput('');
-      } else {
-        setDbTestResult({ connected: false, message: data.error || 'Failed to update' });
-      }
-    } catch (err: unknown) {
-      const error = err as Error;
-      setDbTestResult({ connected: false, message: error.message });
-    } finally {
-      setDbTesting(false);
-    }
-  };
 
   // Filtering
   useEffect(() => {
@@ -901,87 +848,6 @@ export default function GuardsPage() {
         </div>
       )}
 
-      {/* ─── SUPABASE DATABASE CONFIG MODAL ─────────────────────────────── */}
-      {showDbModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="relative bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-gray-100 p-6 sm:p-7">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-xl">
-                  ⚡
-                </div>
-                <div>
-                  <h3 className="font-bold text-base text-[#040936]">Supabase Database Setup</h3>
-                  <p className="text-xs text-gray-400">PostgreSQL Cloud Database Connection</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowDbModal(false)}
-                className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 flex items-center justify-center transition-colors"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Current Status */}
-            <div className="p-3.5 rounded-2xl bg-gray-50 border border-gray-200 mb-5 text-xs">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-gray-500 font-semibold">Connection Status:</span>
-                <span
-                  className={`font-bold px-2 py-0.5 rounded-full text-[10px] ${dbTestResult?.connected
-                      ? 'bg-emerald-100 text-emerald-800'
-                      : 'bg-amber-100 text-amber-800'
-                    }`}
-                >
-                  {dbTestResult?.connected ? 'CONNECTED ✓' : 'PASSWORD PENDING'}
-                </span>
-              </div>
-              <p className="text-gray-600 text-[11px]">{dbTestResult?.message || dbMessage}</p>
-            </div>
-
-            {/* Password Form */}
-            <form onSubmit={handleSaveDbPassword} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1.5">
-                  Supabase Database Password
-                </label>
-                <input
-                  type="password"
-                  value={dbPasswordInput}
-                  onChange={(e) => setDbPasswordInput(e.target.value)}
-                  placeholder="Enter your Supabase database password"
-                  className="form-input text-xs"
-                  required
-                />
-                <p className="text-[10px] text-gray-400 mt-1">
-                  This is the password you set in Supabase Dashboard (Settings → Database).
-                </p>
-              </div>
-
-              <div className="flex items-center gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowDbModal(false)}
-                  className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-xs font-semibold hover:bg-gray-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={dbTesting || !dbPasswordInput.trim()}
-                  className="flex-1 py-2.5 rounded-xl bg-[#040936] text-white text-xs font-bold hover:brightness-110 disabled:opacity-50 transition-all flex items-center justify-center gap-1.5 shadow-md"
-                >
-                  {dbTesting ? (
-                    <span>Connecting...</span>
-                  ) : (
-                    <span>Save & Connect ⚡</span>
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* Delete Confirmation Modal */}
       {deleteTarget && (
